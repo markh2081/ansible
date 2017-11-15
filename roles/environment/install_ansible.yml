@@ -1,0 +1,8 @@
+---
+- hosts: localhost
+  gather_facts: False
+  sudo: yes
+  vars:
+  roles:
+      - ansible
+

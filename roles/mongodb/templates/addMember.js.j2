@@ -1,0 +1,5 @@
+{% for nodo in hostvars['localhost']['ip_array'] %}
+  {% if nodo.public != first_host %}
+rs.add("{{ nodo.private }}:27017");
+  {% endif %}
+{% endfor %}

@@ -1,0 +1,83 @@
+---
+#export AWS_ACCESS_KEY_ID=XXXXXXXXXXXXXXXXXXXXXx
+#export AWS_SECRET_ACCESS_KEY=XXXXXXXXXXXXXXXXXXxxx
+#export ANSIBLE_HOST_KEY_CHECKING=False && ansible-playbook -i ec2.py -e 'host_key_checking=False' mongo_rs.yml 
+
+- hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+
+      - name: EC2 provisioning of the mongod machines
+        ec2:
+            region: us-east-1
+            zone: us-east-1a
+            key_name: mongodb
+            instance_type: t2.small
+            image: ami-da05a4a0
+            wait: yes
+            assign_public_ip: yes
+            group:
+                - "MongoDB Security Group"
+            vpc_subnet_id: subnet-09ba246d
+            instance_tags:
+                Name: mongodb
+                Role: mongodb
+                Environment: int_qa
+            exact_count: 3
+            count_tag:
+                Name: mongodb
+            volumes:
+                - device_name: /dev/xvda
+                  volume_size: 15
+        register: ec2
+
+      - name: Wait for SSH to come up
+        wait_for: host={{ ec2.instances[0].public_ip }} port=22 delay=10 timeout=240 state=started
+        when: ec2|changed
+
+      - name: Add the host to the group to be provisioned
+        add_host: name={{ ec2.instances[0].public_ip }} groupname=to_be_provisioned
+        when: ec2|changed
+
+      - ec2_instance_facts:
+          filters:
+            "tag:Name": mongodb
+            instance-state-name: running
+          region: us-east-1
+        register: instances_found
+
+      - debug: var=instances_found
+#      - debug: var=item
+#        with_items:
+#          - "{{ instances_found.instances }}"
+
+      - name: Gathering private private_ip to var
+        set_fact:
+          public_ips: "{{ (public_ips|default([])) + [item.network_interfaces[0].association.public_ip] }}"
+          ip_array: "{{ (ip_array|default([])) + [{'public': item.network_interfaces[0].association.public_ip, 'private': item.network_interfaces[0].private_ip_address}] }}"
+        with_items:
+          - "{{ instances_found.instances }}"
+#        when: 
+#          - item.network_interfaces|length > 1
+ 
+      - name: Gathering hosts
+        add_host: name={{ item }} groupname=mongodbrs
+        with_items:
+          - "{{ public_ips }}"
+
+- hosts: mongodbrs
+  sudo: yes
+  remote_user: ubuntu
+  roles: 
+    - common_server
+    - mongodb
+  vars:
+    - replSetName: "rs0"
+    - hosts_public_private: "{{ hosts_public_private }}"
+
+  #this line is because ubuntu 16.04 doesn't have python
+  gather_facts: no
+  tasks:
+    - name: Public / Private ip address
+      debug: var=hostvars['localhost']['ip_array']

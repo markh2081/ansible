@@ -1,0 +1,42 @@
+---
+#this line is because ubuntu 16.04 doesn't have python and we need connect in mode raw
+- name: Bootstrap a legacy python 2.4 host
+  raw: apt-get install python-simplejson -y
+
+- name: Install packages
+  apt: name={{ item }} state=latest update_cache=yes
+  with_items: "{{ packages_to_install }}"
+
+- name: Upgrade server via apt
+  apt: update_cache="yes" upgrade="safe"
+
+- name: Install fail2ban
+  apt: name=fail2ban state=present
+  when: enable_fail2ban
+
+- name: Ensure fail2ban is running and enabled on boot
+  service: name=fail2ban state=started enabled=yes
+  when: enable_fail2ban
+
+- name: Install additional packages
+  apt: name={{ item }} state=latest update_cache=yes
+  with_items: "{{ additional_packages }}"
+
+- name: Set machine hostname to match the one defined
+  hostname: name={{ hostname }}
+  when: hostname is defined
+
+- name: Set hosts file to auto resolve localhost
+  lineinfile: dest=/etc/hosts line='127.0.0.1 localhost'
+
+- name: Set hosts file to auto resolve the hostname
+  lineinfile: dest=/etc/hosts line='127.0.0.1 {{ hostname }}'
+  when: hostname is defined
+
+- name: Fill the template for ntp.conf
+  template: src=ntp.conf.j2 dest=/etc/ntp.conf
+  notify:
+  - Restart ntp
+
+- name: Ensure ntp is started and enabled
+  service: name=ntp state=started enabled=yes

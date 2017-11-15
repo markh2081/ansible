@@ -1,0 +1,24 @@
+---
+packages_to_install:
+    - git
+    - rsync
+    - python-apt
+    - aptitude
+    - ntp
+    - zip
+    - unzip
+    - lvm2
+    - apt-transport-https
+    - ca-certificates
+    - curl
+    - software-properties-common
+    - python-pip
+
+additional_packages: []
+
+ntp_servers:
+    - 0.amazon.pool.ntp.org
+    - 1.amazon.pool.ntp.org
+    - 2.amazon.pool.ntp.org
+
+enable_fail2ban: False

@@ -1,0 +1,87 @@
+---
+- name: Authorize the public key access
+  authorized_key: user=ubuntu key="{{ lookup('file', authorized_key_file) }}"
+  when: authorized_key_file is defined
+
+- name: Add an Apt key for mongodb
+  apt_key:
+    keyserver: keyserver.ubuntu.com
+    id: EA312927
+    state: present
+
+- name: Adding mongodb repository
+  apt_repository:
+    repo: deb http://repo.mongodb.org/apt/ubuntu xenial/mongodb-org/3.2 multiverse
+    state: present
+
+- name: Update repositories cache and install "mongodb-org" package
+  apt:
+    name: mongodb-org
+    update_cache: yes
+
+- name: MongoDB - stop server
+  service: name=mongod state=stopped
+
+#- name: check if ssl folder already exists
+#  stat: path=/etc/ssl
+#  register: ssl_folder
+
+#- name: re-create ssl folder
+#  file: path=/etc/ssl state=directory
+#  when: (ssl_folder.stat.isdir == False) or ({{ force|default(False) }} == True)
+
+#- name: create self-signed SSL cert
+#  command: openssl req -newkey rsa:2048 -new -x509 -days 365 -nodes -subj "/C=XX/ST=XX/L=XX/O=XX/CN=XX@XX.com" -out /etc/ssl/mongodb-cert.crt -keyout /etc/ssl/mongodb-cert.key
+
+#- name: compile self-signed SSL cert in PEM file
+#  shell: cat /etc/ssl/mongodb-cert.key /etc/ssl/mongodb-cert.crt > /etc/ssl/mongodb.pem
+
+- name: saving first host in a variable
+  set_fact: 
+    first_host: "{{ play_hosts | first }}"
+
+- name: saving first host private IP in a variable
+  set_fact: 
+    first_host_private: "{{ hostvars[inventory_hostname].ec2_private_ip_address }}"
+  when: inventory_hostname == first_host
+
+- name: saving slave hosts private IPs
+  set_fact: 
+    slaves_host_private: "{{ hostvars[inventory_hostname].ec2_private_ip_address }}"
+  when: inventory_hostname != first_host
+
+- name: debug
+  debug: var=slaves_host_private
+
+- name: Installing configuration file
+  template: src=templates/mongod.conf.j2 dest=/etc/mongod.conf mode=0644
+
+- name: MongoDB - start server
+  service: name=mongod state=started
+
+- name: copy initRS script to master
+  template: src=initRS.js.j2 dest=/tmp/initRS.js
+  when: inventory_hostname == first_host
+
+- name: initiate replica set from first primary
+  shell: mongo < /tmp/initRS.js
+  when: inventory_hostname == first_host
+
+- name: copy waiting master script
+  template: src=master.js.j2 dest=/tmp/master.js
+  when: inventory_hostname == first_host
+
+- name: wait for host to become primary
+  shell: mongo < /tmp/master.js
+  when: inventory_hostname == first_host
+
+- name: copy addmember script
+  template: src=addMember.js.j2 dest=/tmp/addMember.js
+  when: inventory_hostname == first_host
+
+- name: adding member
+  shell: mongo < /tmp/addMember.js
+  when: inventory_hostname == first_host
+
+- name: Internal IPs
+  debug: msg="The private IPs that we are going to use are {{ hostvars['localhost']['ip_array'] }}"

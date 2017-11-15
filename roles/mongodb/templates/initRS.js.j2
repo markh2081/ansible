@@ -1,0 +1,9 @@
+rs.initiate(
+   {
+      _id: "{{ replSetName }}",
+      version: 1,
+      members: [
+         { _id: 0, host : "{{ first_host_private }}:27017" }
+      ]
+   }
+);

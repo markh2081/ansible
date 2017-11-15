@@ -1,0 +1,15 @@
+---
+- hosts: '{{ hosts }}'
+  sudo: yes
+  vars:
+  roles:
+      - nodejs
+  
+  tasks:
+      - name: Create the user
+        user: name={{ application_user }} state=present
+        when: application_user is defined
+
+      - name: Create the application dir
+        file: path={{ application_dir }} owner={{ application_user }} group={{ application_user }} state=directory
+        when: application_dir is defined and application_user is defined

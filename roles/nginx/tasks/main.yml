@@ -1,0 +1,24 @@
+---
+- name: Authorize the public key access
+  authorized_key: user=ubuntu key="{{ lookup('file', authorized_key_file) }}"
+  when: authorized_key_file is defined
+
+- name: Add an Apt key for Nginx
+  apt_key:
+    url: http://nginx.org/keys/nginx_signing.key
+    state: present
+
+- name: Adding nginx repository
+  apt_repository:
+    repo: deb http://nginx.org/packages/ubuntu/ xenial nginx
+    state: present
+
+- name: Update repositories cache and install "nginx" package
+  apt:
+    name: nginx
+
+- name: Restart nginx server
+  service: name=nginx state=restarted
+
+#- name: Installing configuration file
+#  template: src=templates/mongod.conf.j2 dest=/etc/mongod.conf mode=0644

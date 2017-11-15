@@ -1,0 +1,7 @@
+---
+- hosts: '{{ hosts }}'
+  sudo: yes
+  vars:
+  roles:
+      - supervisord
+  

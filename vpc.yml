@@ -1,0 +1,8 @@
+---
+#ansible-playbook vpc.yml -i ./ec2.py -e @vars.yml -v #to MongoDB
+#ansible-playbook vpc.yml -i ./ec2.py -e @vars_vpc_nginx.yml #to Nginx
+- hosts: localhost
+  connection: local
+  gather_facts: no
+  roles:
+    - vpc

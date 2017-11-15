@@ -1,0 +1,8 @@
+---
+aws_scripts_path: /opt/aws-scripts-mon
+packages_to_install:
+    - git
+    - libwww-perl
+    - libdatetime-perl
+    - zip
+    - unzip

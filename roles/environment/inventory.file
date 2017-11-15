@@ -1,0 +1,20 @@
+[jenkins]
+10.125.158.22    ansible_connection=ssh    ansible_user=ubuntu    #ansible_ssh_private_key_file=
+
+[devfrontservers]
+10.125.54.27    ansible_connection=ssh    ansible_user=cliente
+
+[devbackservers]
+10.125.54.68    ansible_connection=ssh    ansible_user=cliente
+
+[prefrontservers]
+10.125.54.27    ansible_connection=ssh    ansible_user=cliente
+
+[prebackservers]
+10.125.54.68    ansible_connection=ssh    ansible_user=cliente
+
+[profrontservers]
+10.125.54.27    ansible_connection=ssh    ansible_user=cliente
+
+[probackservers]
+10.125.54.68    ansible_connection=ssh    ansible_user=cliente
