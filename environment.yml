@@ -2,7 +2,7 @@
 #export AWS_ACCESS_KEY_ID=XXXXXXXXXXXXXXXXXXXXXx
 #export AWS_SECRET_ACCESS_KEY=XXXXXXXXXXXXXXXXXXxxx
 #export ANSIBLE_HOST_KEY_CHECKING=False
-#ansible-playbook -i ec2.py environment.yml -v
+#ansible-playbook -i ec2.py -e folder=$(pwd)/example/ -e image_name=example environment.yml
 
 #- hosts: localhost
 #  connection: local
@@ -12,10 +12,10 @@
 #    security_group_name: "registry"
 #    cidr_block: "10.0.0.0"
 #    registry_vpc: true
+#    elastic_ip: "34.225.97.180"
 #  roles:
 #    - vpc
-
-
+--- 
 - hosts: localhost
   connection: local
   gather_facts: no
@@ -45,13 +45,34 @@
                 Name: registry
             volumes:
                 - device_name: /dev/xvda
-                  volume_size: 100
+                  volume_size: 20
         register: ec2
 
       - name: Wait for SSH to come up
-        wait_for: host={{ ec2.instances[0].public_ip }} port=22 delay=10 timeout=240 state=started
+        wait_for: host={{ ec2.instances[0].public_ip }} port=22 delay=10 timeout=300 state=started
         when: 
           - ec2|changed
+
+      - name: associate an elastic IP with an instance
+        ec2_eip:
+          device_id: "{{ ec2.instances[0].id }}"
+          ip: "{{ elastic_ip }}"
+          ec2_url: "https://ec2.us-east-1.amazonaws.com:443"
+        when: 
+          - elastic_ip is defined
+          - ec2|changed
+
+      - name: Wait for SSH to come up via elastic_ip
+        wait_for: host={{ elastic_ip }} port=22 delay=10 timeout=240 state=started
+        when: 
+          - ec2|changed
+          - elastic_ip is defined
+
+
+      - name: Add the host to the group to be provisioned via elastic_ip
+        add_host: name={{ elastic_ip }} groupname=to_be_provisioned
+        when: 
+          - elastic_ip is defined
 
       - ec2_instance_facts:
           filters:
@@ -84,6 +105,74 @@
           - log_var is defined
           - log_var is true
 
+---
+- hosts: localhost
+  connection: local
+  gather_facts: no
+  vars:
+    security_group_name: "registry"
+    subnet_id: subnet-3078e154
+    aws_region: "us-east-1"
+    aws_zone: "us-east-1a"
+  tasks:
+      - name: EC2 provisioning of the nodes machines
+        ec2:
+            region: "{{ aws_region }}"
+            zone: "{{ aws_zone }}"
+            key_name: mrivera
+            instance_type: t2.medium
+            image: ami-da05a4a0
+            wait: yes
+            assign_public_ip: yes
+            group:
+                - "{{security_group_name}} Security Group"
+            vpc_subnet_id: "{{ subnet_id }}"
+            instance_tags:
+                Name: nodes
+                Role: nodes
+            exact_count: 1
+            count_tag:
+                Name: nodes
+
+        register: ec2
+
+      - name: Wait for SSH to come up
+        wait_for: host={{ ec2.instances[0].public_ip }} port=22 delay=10 timeout=240 state=started
+        when: 
+          - ec2|changed
+
+      - ec2_instance_facts:
+          filters:
+            "tag:Name": nodes
+            instance-state-name: running
+          region: us-east-1
+        register: nodes_instances_found
+
+      - name: Gathering public ips from tagged instances
+        set_fact:
+          nodes_public_ips: "{{ (nodes_public_ips|default([])) + [item.network_interfaces[0].association.public_ip] }}"
+        with_items:
+          - "{{ nodes_instances_found.instances }}"
+
+      - name: Gathering public ips from provisioned instances
+        set_fact:
+          public_ips: "{{ (nodes_public_ips|default([])) + [item] }}"
+        with_items:
+          - "{{ ec2.instances[0].public_ip }}"
+        when: 
+          - ec2|changed
+
+      - name: Add the host to the group to be provisioned
+        add_host: name={{ item }} groupname=nodes_to_be_provisioned
+        with_items:
+          - "{{ nodes_public_ips }}"
+
+      - debug: var=nodes_public_ips
+        when: 
+          - log_var is defined
+          - log_var is true
+
+---
 - hosts: to_be_provisioned
   sudo: yes
   remote_user: ubuntu
@@ -96,10 +185,6 @@
   vars:
     registry_volume: /mnt/registry
   tasks:
-
-    - name: installing docker-py
-      pip: name="docker-py"
-
     - name: creating registry volume folder
       file: path="{{ registry_volume }}" state="directory"
       when: registry_volume is defined
@@ -113,6 +198,23 @@
         restart_policy: always
         state: started
         volumes: "{{ registry_volume }}:/var/lib/registry"
-
-    - name: Finished
-      debug: msg="Finished"
+---
+- hosts: nodes_to_be_provisioned
+  sudo: yes
+  remote_user: ubuntu
+  roles: 
+    - common_server
+    - docker
+---
+- hosts: localhost
+  connection: local
+  gather_facts: no
+  vars:
+    elastic_ip: "34.225.97.180"
+  tasks:
+    - name: Building image
+      docker_image:
+        path: "{{ folder }}"
+        name: "{{ elastic_ip }}:5000/{{ image_name }}"
+        push: yes
+        force: yes

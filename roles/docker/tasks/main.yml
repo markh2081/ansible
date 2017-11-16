@@ -16,5 +16,5 @@
 - name: Restart docker service
   service: name=docker state=restarted
 
-#- name: Installing configuration file
-#  template: src=templates/mongod.conf.j2 dest=/etc/mongod.conf mode=0644
+- name: installing docker-py
+  pip: name="docker-py"
